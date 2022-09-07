@@ -1,0 +1,98 @@
+@startuml "Reception"
+
+interface IReception {
+    Reception::Request getRequest(void);
+    void sendResponse(Reception::Response);
+}
+
+' The Load Balancer is responsible of Kitchens, but not of cooks
+
+class LoadBalancer {
+}
+
+interface IIPC {
+    void writeBytes(byte_v bytes);
+    byte_v readBytes(size_t nbBytes);
+    bool isEmpty(void);
+    void open(void);
+    bool isOpen(void) const;
+    void close(void);
+    void setMode(IPCMode mode);
+}
+
+interface IKitchen {
+    void start(void);
+    IKitchen &operator<<(Pizza &)  Send a pizza order
+    IKitchen::Status getStatus()
+    vector(Pizza) getReadyPizzas()
+}
+
+note bottom: IKitchen::start() is shared with IProcess::start()
+
+
+interface IProcess {
+    void start(void);
+    void sendData(byte_v &);
+    byte_v pollData(size_t nbBytes);
+    bool isParent(void) const;
+    bool isChild(void) const;
+    pid_t getPid(void) const;
+    bool isActive(void) const;
+    void setIpc(IIPC ipc);
+}
+
+abstract AProcess {
+    void start() final;
+    bool isParent(void) const final;
+    bool isChild(void) const final;
+    bool isActive(void) const final;
+    pid_t getPid(void) const final;
+    void sendData(byte_v &) final;
+    byte_v pollData(size_t nbBytes) final;
+    void setIpc(IIPC ipc) final;
+
+    #int run(void) = 0;
+    #std::unique_ptr<PlazzaIpc> _ipc;
+    -pid_t _pid;
+
+}
+note bottom: Child classes just need to implement run()
+
+abstract AIPC {
+    void setMode(IPCMode mode) final;
+}
+
+class Kitchen {
+    int run() final;
+    Kitchen &operator<<(Pizza &pizza) final;
+    IKitchen::Status getStatus() const final;
+    pizza_v getReadyPizzas() final;
+}
+
+class PlazzaIpc {
+    void writeBytes(byte_v bytes) override;
+    byte_v readBytes(size_t nbBytes) override;
+    bool isEmpty(void) override;
+    void open(void) override;
+    bool isOpen(void) const override;
+    void close(void) override;
+    -unsigned int _id;
+    -std::unique_ptr<Fifo> _parentReadFifo;
+    -std::unique_ptr<Fifo> _childReadFifo;
+}
+
+
+LoadBalancer "1" *-- "N" IKitchen
+LoadBalancer -up- IReception
+AProcess *- AIPC
+IProcess <|-- AProcess
+
+IIPC <|-- AIPC
+AIPC <|-- PlazzaIpc
+
+AProcess <|-- Kitchen
+IKitchen <|-- Kitchen
+Kitchen *- PlazzaIpc
+PlazzaIpc "1" *- "2" Fifo
+
+@enduml
